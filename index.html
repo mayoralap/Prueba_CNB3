@@ -330,7 +330,7 @@
 
     // Función exclusiva para el login nativo dentro de la APK móvil
     window.ejecutarLoginMovilNativo = async function () {
-      
+
       alert(
         "PLUGIN=" +
         typeof window.Capacitor?.Plugins?.SocialLogin
@@ -355,10 +355,7 @@
         );
 
         const res = await SocialLogin.login({
-          provider: 'google',
-          options: {
-            scopes: ['profile', 'email']
-          }
+          provider: 'google'
         });
 
         console.log(
