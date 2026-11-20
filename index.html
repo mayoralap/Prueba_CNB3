@@ -384,37 +384,20 @@
 
       } catch (err) {
 
-        console.error(err);
+        console.error("ERROR COMPLETO", err);
 
-        let detalle;
+        const textoError =
+          "typeof: " + typeof err +
+          "\nstring: " + String(err) +
+          "\nmessage: " + (err?.message || "SIN MESSAGE") +
+          "\ncode: " + (err?.code || "SIN CODE");
 
-        try {
-
-          detalle =
-            JSON.stringify(
-              err,
-              null,
-              2
-            );
-
-        } catch {
-
-          detalle =
-            String(err);
-
-        }
-
-        alert(
-          "ERROR SOCIALLOGIN:\n\n" +
-          detalle
-        );
+        alert(textoError);
 
         mostrarAviso(
-          "ERROR: " +
-          detalle,
+          textoError,
           true
         );
-
       }
 
     };
