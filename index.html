@@ -367,22 +367,28 @@
           "Login completado"
         );
 
-        if (
-          res &&
-          res.result &&
-          res.result.authentication &&
-          res.result.authentication.idToken
-        ) {
+        const resData = res.result || res;
 
-          const token =
-            res.result.authentication.idToken;
+        const token =
+          resData.idToken ||
+          resData.accessToken ||
+          resData?.authentication?.idToken;
+
+        mostrarAviso(
+          "TOKEN=" + (token ? "ENCONTRADO" : "NO")
+        );
+
+        if (token) {
+
+          mostrarAviso("TOKEN OK");
 
           window.location.href =
             construirURLFinal(token);
 
         } else {
 
-          alert(
+          console.log(
+            "RESPUESTA COMPLETA:",
             JSON.stringify(res, null, 2)
           );
 
