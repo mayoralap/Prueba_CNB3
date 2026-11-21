@@ -112,6 +112,9 @@
 
     const CLIENTE_WEB =
       "498552950849-4cj5lp97qrbqf63jc914ji96lq744m4t.apps.googleusercontent.com";
+    
+    const CLIENTE_ANDROID =
+      "839165918275-7k8cp04fnbo9id02i2s6ni5pqvvl5om3.apps.googleusercontent.com";
 
     const URL_APPS_SCRIPT =
       "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
@@ -306,7 +309,7 @@
       const gisListo = await cargarScriptGISWeb();
       if (gisListo && window.google?.accounts?.id) {
         google.accounts.id.initialize({
-          client_id: CLIENTE_WEB,
+          client_id: CLIENTE_ANDROID,
           callback: C
         });
 
