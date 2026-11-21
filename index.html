@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Columba Notebook – Verificación de Identidad v5</title>
+  <title>Columba Notebook – Verificación de Identidad v6</title>
 
   <style>
     :root {
@@ -81,6 +81,11 @@
     .btn-google:hover {
       background: #1558b0;
     }
+
+    .btn-google:disabled {
+      background: #9aa0a6;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 
@@ -110,17 +115,16 @@
     import { Capacitor }
       from 'https://cdn.jsdelivr.net/npm/@capacitor/core@8.6.0/+esm';
 
+    // Cliente Web: usado por GIS en navegador y como serverClientId (webClientId) en Android
     const CLIENTE_WEB =
       "498552950849-4cj5lp97qrbqf63jc914ji96lq744m4t.apps.googleusercontent.com";
-    
+
+    // Cliente Android (com.columbanotebook.pro + SHA-1): validado automáticamente por Google Play Services en el SDK nativo
     const CLIENTE_ANDROID =
       "839165918275-7k8cp04fnbo9id02i2s6ni5pqvvl5om3.apps.googleusercontent.com";
 
     const URL_APPS_SCRIPT =
       "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
-
-    // URL de retorno / auth bridge en tu dominio o Apps Script (ajústala si usas un endpoint propio de retorno)
-    const REDIRECT_URI_WEB = window.location.origin + window.location.pathname;
 
     function mostrarAviso(texto, error = false) {
       const m = document.getElementById("mensaje");
@@ -129,15 +133,23 @@
       m.textContent = texto;
     }
 
+    function obtenerBridgeCapacitor() {
+      return window.Capacitor || Capacitor;
+    }
+
     function actualizarDiagnosticoBridge() {
       const box = document.getElementById("diagnosticoBridge");
       if (!box) return;
 
-      const cap = window.Capacitor || Capacitor;
+      const cap = obtenerBridgeCapacitor();
+      const plugins = Object.keys(cap?.Plugins || {});
       const info = {
         platform: cap?.getPlatform ? cap.getPlatform() : "web",
         isNative: cap?.isNativePlatform ? cap.isNativePlatform() : false,
-        plugins: Object.keys(cap?.Plugins || {})
+        columbaAuthActivo: Boolean(cap?.Plugins?.ColumbaAuth),
+        clienteWeb: CLIENTE_WEB.slice(0, 12) + "..." + CLIENTE_WEB.slice(-32),
+        clienteAndroid: CLIENTE_ANDROID.slice(0, 12) + "..." + CLIENTE_ANDROID.slice(-32),
+        plugins
       };
 
       box.textContent = "Bridge: " + JSON.stringify(info);
@@ -190,23 +202,19 @@
     }
 
     function capturarTokenDeUrl() {
-      // Revisa query string (?token=... o ?id_token=... o ?access_token=...)
       const params = new URLSearchParams(window.location.search);
       const queryToken =
         params.get("token") ||
         params.get("id_token") ||
-        params.get("access_token") ||
         params.get("credential");
 
       if (queryToken) return queryToken;
 
-      // Revisa hash (#id_token=... o #access_token=...)
       if (window.location.hash && window.location.hash.length > 1) {
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const hashToken =
           hashParams.get("token") ||
           hashParams.get("id_token") ||
-          hashParams.get("access_token") ||
           hashParams.get("credential");
 
         if (hashToken) return hashToken;
@@ -215,45 +223,58 @@
       return null;
     }
 
-    function iniciarFlujoGoogleSinPlugin() {
+    // Flujo exclusivo para Android nativo usando ColumbaAuthPlugin (evita 403 en WebView)
+    async function iniciarLoginNativoAndroid() {
       actualizarDiagnosticoBridge();
-      mostrarAviso("Abriendo autenticación de Google...");
 
-      const state = btoa(JSON.stringify({
-        deviceId: obtenerOGenerarDeviceId(),
-        huellaDigital: generarHuellaDigitalNativa(),
-        ts: Date.now()
-      }));
+      const btn = document.getElementById("btnGoogleLogin");
+      const cap = obtenerBridgeCapacitor();
+      const columbaAuth = cap?.Plugins?.ColumbaAuth;
 
-      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-      authUrl.searchParams.set("client_id", CLIENTE_WEB);
-      authUrl.searchParams.set("redirect_uri", REDIRECT_URI_WEB);
-      authUrl.searchParams.set("response_type", "token");
-      authUrl.searchParams.set("scope", "openid email profile");
-      authUrl.searchParams.set("state", state);
-      authUrl.searchParams.set("prompt", "select_account");
-
-      window.location.href = authUrl.toString();
-    }
-
-    globalThis.ejecutarLoginMovilNativo = async function () {
-      try {
-        iniciarFlujoGoogleSinPlugin();
-      } catch (error) {
+      if (!columbaAuth || typeof columbaAuth.loginGoogle !== "function") {
         mostrarAviso(
-          "Error al iniciar sesión con Google: " + (error?.message || String(error)),
+          "Plugin nativo ColumbaAuth no detectado en el APK instalado. Verifica que MainActivity tenga registrado ColumbaAuthPlugin y reinstala el APK compilado.",
           true
         );
-      }
-    };
-
-    window.C = function (resp) {
-      if (!resp?.credential) {
-        mostrarAviso("No se recibió credencial", true);
         return;
       }
 
-      mostrarAviso("Acceso correcto...");
+      try {
+        if (btn) btn.disabled = true;
+        mostrarAviso("Abriendo selector nativo de cuentas de Google...");
+
+        const respuesta = await columbaAuth.loginGoogle({
+          webClientId: CLIENTE_WEB,
+          androidClientId: CLIENTE_ANDROID
+        });
+
+        const token = respuesta?.token;
+        if (!token) {
+          throw new Error("El plugin nativo no devolvió token");
+        }
+
+        mostrarAviso("Acceso correcto, redirigiendo...");
+        window.location.href = construirURLFinal(token);
+      } catch (error) {
+        mostrarAviso(
+          "Error en autenticación nativa: " + (error?.message || String(error)),
+          true
+        );
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    globalThis.ejecutarLoginMovilNativo = iniciarLoginNativoAndroid;
+
+    // Callback exclusivo para Google Identity Services (GIS) en navegador Web
+    window.C = function (resp) {
+      if (!resp?.credential) {
+        mostrarAviso("No se recibió credencial de Google Web", true);
+        return;
+      }
+
+      mostrarAviso("Acceso correcto, redirigiendo...");
       window.location.href = construirURLFinal(resp.credential);
     };
 
@@ -271,7 +292,7 @@
       });
     }
 
-    function renderizarBotonDirecto() {
+    function renderizarBotonNativoAndroid() {
       const buttonDiv = document.getElementById("buttonDiv");
       buttonDiv.innerHTML = `
         <button id="btnGoogleLogin" type="button" class="btn-google">
@@ -281,14 +302,13 @@
 
       const btn = document.getElementById("btnGoogleLogin");
       if (btn) {
-        btn.addEventListener("click", iniciarFlujoGoogleSinPlugin);
+        btn.addEventListener("click", iniciarLoginNativoAndroid);
       }
     }
 
     async function inicializar() {
       actualizarDiagnosticoBridge();
 
-      // Si regresamos con un token en URL o hash, redirigir de inmediato a Apps Script
       const tokenRetorno = capturarTokenDeUrl();
       if (tokenRetorno) {
         mostrarAviso("Token recibido, redirigiendo...");
@@ -296,21 +316,19 @@
         return;
       }
 
-      const esNativo =
-        Boolean(window.Capacitor?.isNativePlatform?.()) ||
-        Boolean(Capacitor?.isNativePlatform?.());
+      const cap = obtenerBridgeCapacitor();
+      const esNativo = Boolean(cap?.isNativePlatform?.());
 
-      // En Android o cuando GIS no aplique en WebView remoto, usamos el botón directo sin plugin
       if (esNativo) {
-        renderizarBotonDirecto();
+        renderizarBotonNativoAndroid();
         return;
       }
 
       const gisListo = await cargarScriptGISWeb();
       if (gisListo && window.google?.accounts?.id) {
         google.accounts.id.initialize({
-          client_id: CLIENTE_ANDROID,
-          callback: C
+          client_id: CLIENTE_WEB,
+          callback: window.C
         });
 
         google.accounts.id.renderButton(
@@ -322,7 +340,7 @@
           }
         );
       } else {
-        renderizarBotonDirecto();
+        mostrarAviso("No se pudo cargar Google Identity Services en el navegador.", true);
       }
     }
 
