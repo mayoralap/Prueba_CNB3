@@ -65,6 +65,22 @@
       color: #3c4043;
       word-break: break-word;
     }
+
+    .btn-google {
+      width: 290px;
+      height: 42px;
+      border: none;
+      border-radius: 4px;
+      background: var(--color-primary);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .btn-google:hover {
+      background: #1558b0;
+    }
   </style>
 </head>
 
@@ -100,6 +116,9 @@
     const URL_APPS_SCRIPT =
       "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
 
+    // URL de retorno / auth bridge en tu dominio o Apps Script (ajústala si usas un endpoint propio de retorno)
+    const REDIRECT_URI_WEB = window.location.origin + window.location.pathname;
+
     function mostrarAviso(texto, error = false) {
       const m = document.getElementById("mensaje");
       if (!m) return;
@@ -113,7 +132,7 @@
 
       const cap = window.Capacitor || Capacitor;
       const info = {
-        platform: cap?.getPlatform ? cap.getPlatform() : "unknown",
+        platform: cap?.getPlatform ? cap.getPlatform() : "web",
         isNative: cap?.isNativePlatform ? cap.isNativePlatform() : false,
         plugins: Object.keys(cap?.Plugins || {})
       };
@@ -167,46 +186,59 @@
       );
     }
 
-    function obtenerPluginColumbaAuth() {
-      return window.Capacitor?.Plugins?.ColumbaAuth || null;
+    function capturarTokenDeUrl() {
+      // Revisa query string (?token=... o ?id_token=... o ?access_token=...)
+      const params = new URLSearchParams(window.location.search);
+      const queryToken =
+        params.get("token") ||
+        params.get("id_token") ||
+        params.get("access_token") ||
+        params.get("credential");
+
+      if (queryToken) return queryToken;
+
+      // Revisa hash (#id_token=... o #access_token=...)
+      if (window.location.hash && window.location.hash.length > 1) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const hashToken =
+          hashParams.get("token") ||
+          hashParams.get("id_token") ||
+          hashParams.get("access_token") ||
+          hashParams.get("credential");
+
+        if (hashToken) return hashToken;
+      }
+
+      return null;
+    }
+
+    function iniciarFlujoGoogleSinPlugin() {
+      actualizarDiagnosticoBridge();
+      mostrarAviso("Abriendo autenticación de Google...");
+
+      const state = btoa(JSON.stringify({
+        deviceId: obtenerOGenerarDeviceId(),
+        huellaDigital: generarHuellaDigitalNativa(),
+        ts: Date.now()
+      }));
+
+      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      authUrl.searchParams.set("client_id", CLIENTE_WEB);
+      authUrl.searchParams.set("redirect_uri", REDIRECT_URI_WEB);
+      authUrl.searchParams.set("response_type", "token");
+      authUrl.searchParams.set("scope", "openid email profile");
+      authUrl.searchParams.set("state", state);
+      authUrl.searchParams.set("prompt", "select_account");
+
+      window.location.href = authUrl.toString();
     }
 
     globalThis.ejecutarLoginMovilNativo = async function () {
       try {
-        actualizarDiagnosticoBridge();
-        mostrarAviso("Conectando con ColumbaAuth en Android...");
-
-        const columbaAuth = obtenerPluginColumbaAuth();
-
-        if (!columbaAuth?.loginGoogle) {
-          mostrarAviso(
-            "Plugin propio ColumbaAuth aún no registrado en MainActivity",
-            true
-          );
-          return;
-        }
-
-        const respuesta = await columbaAuth.loginGoogle({
-          webClientId: CLIENTE_WEB
-        });
-
-        const token =
-          respuesta?.token ||
-          respuesta?.idToken ||
-          respuesta?.accessToken ||
-          null;
-
-        if (!token) {
-          mostrarAviso("ColumbaAuth no devolvió token", true);
-          return;
-        }
-
-        mostrarAviso("Token obtenido, redirigiendo...");
-        window.location.href = construirURLFinal(token);
-
+        iniciarFlujoGoogleSinPlugin();
       } catch (error) {
         mostrarAviso(
-          "Error en ColumbaAuth Android: " + (error?.message || String(error)),
+          "Error al iniciar sesión con Google: " + (error?.message || String(error)),
           true
         );
       }
@@ -236,36 +268,38 @@
       });
     }
 
+    function renderizarBotonDirecto() {
+      const buttonDiv = document.getElementById("buttonDiv");
+      buttonDiv.innerHTML = `
+        <button id="btnGoogleLogin" type="button" class="btn-google">
+          Iniciar sesión con Google
+        </button>
+      `;
+
+      const btn = document.getElementById("btnGoogleLogin");
+      if (btn) {
+        btn.addEventListener("click", iniciarFlujoGoogleSinPlugin);
+      }
+    }
+
     async function inicializar() {
       actualizarDiagnosticoBridge();
+
+      // Si regresamos con un token en URL o hash, redirigir de inmediato a Apps Script
+      const tokenRetorno = capturarTokenDeUrl();
+      if (tokenRetorno) {
+        mostrarAviso("Token recibido, redirigiendo...");
+        window.location.href = construirURLFinal(tokenRetorno);
+        return;
+      }
 
       const esNativo =
         Boolean(window.Capacitor?.isNativePlatform?.()) ||
         Boolean(Capacitor?.isNativePlatform?.());
 
+      // En Android o cuando GIS no aplique en WebView remoto, usamos el botón directo sin plugin
       if (esNativo) {
-        const buttonDiv = document.getElementById("buttonDiv");
-        buttonDiv.innerHTML = `
-          <button
-            id="btnGoogleLogin"
-            style="
-              width:290px;
-              height:42px;
-              border:none;
-              border-radius:4px;
-              background:#1a73e8;
-              color:white;
-              cursor:pointer;
-              font-weight:600;">
-            Iniciar sesión con Google
-          </button>
-        `;
-
-        const btn = document.getElementById("btnGoogleLogin");
-        if (btn) {
-          btn.addEventListener("click", ejecutarLoginMovilNativo);
-        }
-
+        renderizarBotonDirecto();
         return;
       }
 
@@ -285,7 +319,7 @@
           }
         );
       } else {
-        mostrarAviso("Google GIS no cargó", true);
+        renderizarBotonDirecto();
       }
     }
 
