@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Columba Notebook – Verificación de Identidad v6.6.3</title>
+  <title>Columba Notebook – Verificación de Identidad v6.6.4</title>
 
   <style>
     :root {
@@ -64,7 +64,6 @@
       border-radius: 8px;
       color: #3c4043;
       word-break: break-word;
-      white-space: pre-wrap;
     }
 
     .btn-google {
@@ -97,7 +96,7 @@
     <img src="https://drive.google.com/thumbnail?id=15hTMpm_5aNuU2QKTWZGdK2XKdtpEog4w" class="logo-img"
       alt="Columba Notebook">
 
-    <h2>Verificación de Identidad v6.6.3</h2>
+    <h2>Verificación de Identidad v6.6.4</h2>
 
     <p>
       Para verificar el estado de tu cuenta inicia sesión con Google.
@@ -117,14 +116,11 @@
     const CLIENTE_WEB =
       "498552950849-4cj5lp97qrbqf63jc914ji96lq744m4t.apps.googleusercontent.com";
 
-    const CLIENTE_ANDROID =
-      "839165918275-7k8cp04fnbo9id02i2s6ni5pqvvl5om3.apps.googleusercontent.com";
+    const CLIENTE_ANDROID = "839165918275-7k8cp04fnbo9id02i2s6ni5pqvvl5om3.apps.googleusercontent.com";
 
-    const URL_APPS_SCRIPT =
-      "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
+    const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
 
-    const NOMBRE_PLUGIN_PRINCIPAL = "ColumbaAuthPlugin";
-    const NOMBRE_PLUGIN_RESPALDO = "ColumbaAuth";
+    let columbaAuthProxy = null;
 
     function mostrarAviso(texto, error = false) {
       const m = document.getElementById("mensaje");
@@ -134,7 +130,7 @@
     }
 
     function obtenerBridgeCapacitor() {
-      return window.Capacitor || Capacitor || null;
+      return window.Capacitor || null;
     }
 
     function esPlataformaNativa() {
@@ -145,72 +141,133 @@
       return Boolean(window.androidBridge) || navigator.userAgent.includes("ColumbaAppNative");
     }
 
-    function obtenerNombrePluginActivo() {
-      const cap = obtenerBridgeCapacitor();
-      const plugins = (cap && cap.Plugins) || {};
-      if (plugins[NOMBRE_PLUGIN_PRINCIPAL]) return NOMBRE_PLUGIN_PRINCIPAL;
-      if (plugins[NOMBRE_PLUGIN_RESPALDO]) return NOMBRE_PLUGIN_RESPALDO;
-      return NOMBRE_PLUGIN_PRINCIPAL;
-    }
-
     function obtenerPluginColumbaAuth() {
-      const cap = obtenerBridgeCapacitor();
+
+      const cap = window.Capacitor;
+
       if (!cap) {
         return null;
       }
 
-      if (cap.Plugins) {
-        if (cap.Plugins[NOMBRE_PLUGIN_PRINCIPAL]) {
-          return cap.Plugins[NOMBRE_PLUGIN_PRINCIPAL];
-        }
-        if (cap.Plugins[NOMBRE_PLUGIN_RESPALDO]) {
-          return cap.Plugins[NOMBRE_PLUGIN_RESPALDO];
-        }
+      // plugin ya registrado
+      if (
+        cap.Plugins &&
+        cap.Plugins.ColumbaAuth
+      ) {
+        return cap.Plugins.ColumbaAuth;
       }
 
+      // proxy dinámico
       if (typeof cap.registerPlugin === "function") {
-        for (const nombre of [NOMBRE_PLUGIN_PRINCIPAL, NOMBRE_PLUGIN_RESPALDO]) {
-          try {
-            const proxy = cap.registerPlugin(nombre);
-            if (proxy) return proxy;
-          } catch (e) {
-            console.error("Error registrando proxy para " + nombre + ":", e);
-          }
+
+        try {
+
+          return cap.registerPlugin(
+            "ColumbaAuth"
+          );
+
+        } catch (e) {
+
+          console.error(e);
+
         }
+
       }
 
       return null;
     }
 
+    function tienePuenteNativoDirecto() {
+      const cap = obtenerBridgeCapacitor();
+      return Boolean(
+        cap &&
+        (typeof cap.nativePromise === "function" || typeof cap.toNative === "function")
+      );
+    }
+
     function actualizarDiagnosticoBridge() {
-      const box = document.getElementById("diagnosticoBridge");
+
+      const box =
+        document.getElementById(
+          "diagnosticoBridge"
+        );
+
       if (!box) return;
 
-      const cap = obtenerBridgeCapacitor();
-      const plugins = Object.keys((cap && cap.Plugins) || {});
-      const headers = Array.isArray(cap?.PluginHeaders)
-        ? cap.PluginHeaders.map(h => h.name)
-        : [];
+      const cap =
+        window.Capacitor || null;
+
+      const plugins =
+        Object.keys(
+          (cap && cap.Plugins) || {}
+        );
+
+      const headers =
+        Array.isArray(cap?.PluginHeaders)
+          ? cap.PluginHeaders.map(
+            h => h.name
+          )
+          : [];
 
       const info = {
-        pluginObjetivo: NOMBRE_PLUGIN_PRINCIPAL,
-        pluginRespaldo: NOMBRE_PLUGIN_RESPALDO,
-        pluginActivo: obtenerNombrePluginActivo(),
-        platform: cap?.getPlatform ? cap.getPlatform() : "desconocido",
-        isNative: cap?.isNativePlatform ? cap.isNativePlatform() : false,
-        androidBridge: Boolean(window.androidBridge),
-        nativePromise: Boolean(cap && typeof cap.nativePromise === "function"),
-        registerPlugin: Boolean(cap && typeof cap.registerPlugin === "function"),
+
+        platform:
+          cap?.getPlatform
+            ? cap.getPlatform()
+            : "desconocido",
+
+        isNative:
+          cap?.isNativePlatform
+            ? cap.isNativePlatform()
+            : false,
+
+        androidBridge:
+          Boolean(window.androidBridge),
+
+        nativePromise:
+          Boolean(
+            cap &&
+            typeof cap.nativePromise ===
+            "function"
+          ),
+
+        registerPlugin:
+          Boolean(
+            cap &&
+            typeof cap.registerPlugin ===
+            "function"
+          ),
+
         plugins,
+
         headers,
-        capacitorKeys: Object.keys(cap || {})
+
+        capacitorKeys:
+          Object.keys(cap || {})
+
       };
 
-      console.log("CAPACITOR:", cap);
-      console.log("PLUGINS:", plugins);
-      console.log("HEADERS:", headers);
+      console.log(
+        "CAPACITOR:",
+        cap
+      );
 
-      box.textContent = JSON.stringify(info, null, 2);
+      console.log(
+        "PLUGINS:",
+        plugins
+      );
+
+      console.log(
+        "HEADERS:",
+        headers
+      );
+
+      box.textContent =
+        JSON.stringify(
+          info,
+          null,
+          2
+        );
     }
 
     function generarHuellaDigitalNativa() {
@@ -290,41 +347,63 @@
       }
 
       if (cap && typeof cap.nativePromise === "function") {
-        const nombreDestino = obtenerNombrePluginActivo();
-        return await cap.nativePromise(nombreDestino, "loginGoogle", payload);
+        return await cap.nativePromise("ColumbaAuth", "loginGoogle", payload);
       }
 
-      throw new Error("El puente nativo de Capacitor no expone ColumbaAuthPlugin.loginGoogle");
+      throw new Error("El puente nativo de Capacitor no expone ColumbaAuth.loginGoogle");
     }
 
     async function iniciarLoginNativoAndroid() {
+
       actualizarDiagnosticoBridge();
 
       try {
-        mostrarAviso("Abriendo selector de Google...");
 
-        const respuesta = await invocarLoginGoogleNativo({
-          webClientId: CLIENTE_WEB
-        });
+        mostrarAviso(
+          "Abriendo selector de Google..."
+        );
+
+        const respuesta =
+          await invocarLoginGoogleNativo({
+            webClientId: CLIENTE_WEB
+          });
 
         const token =
           respuesta?.token ||
           respuesta?.result?.token;
 
         if (!token) {
-          mostrarAviso("Google no devolvió token", true);
+
+          mostrarAviso(
+            "Google no devolvió token",
+            true
+          );
+
           return;
         }
 
-        mostrarAviso("Token recibido");
-        window.location.href = construirURLFinal(token);
-      } catch (error) {
-        mostrarAviso(error?.message || String(error), true);
+        mostrarAviso(
+          "Token recibido"
+        );
+
+        window.location.href =
+          construirURLFinal(token);
+
       }
+      catch (error) {
+
+        mostrarAviso(
+          error?.message ||
+          String(error),
+          true
+        );
+
+      }
+
     }
 
-    globalThis.ejecutarLoginMovilNativo = iniciarLoginNativoAndroid;
-
+    globalThis.ejecutarLoginMovilNativo =
+      iniciarLoginNativoAndroid;
     window.C = function (resp) {
       if (!resp || !resp.credential) {
         mostrarAviso("No se recibió credencial de Google Web", true);
