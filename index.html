@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Columba Notebook – Verificación de Identidad v6.6.1</title>
+  <title>Columba Notebook – Verificación de Identidad v6.6.2</title>
 
   <style>
     :root {
@@ -96,7 +96,7 @@
     <img src="https://drive.google.com/thumbnail?id=15hTMpm_5aNuU2QKTWZGdK2XKdtpEog4w" class="logo-img"
       alt="Columba Notebook">
 
-    <h2>Verificación de Identidad v6.6.1</h2>
+    <h2>Verificación de Identidad v6.6.2</h2>
 
     <p>
       Para verificar el estado de tu cuenta inicia sesión con Google.
@@ -119,7 +119,7 @@
 
     const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
 
-    let columbaAuthProxy = null;
+    let olumbaAuthPluginProxy = null;
 
     function mostrarAviso(texto, error = false) {
       const m = document.getElementById("mensaje");
@@ -140,7 +140,7 @@
       return Boolean(window.androidBridge) || navigator.userAgent.includes("ColumbaAppNative");
     }
 
-    function obtenerPluginColumbaAuth() {
+    function obtenerPluginolumbaAuthPlugin() {
 
       const cap = window.Capacitor;
 
@@ -151,9 +151,9 @@
       // plugin ya registrado
       if (
         cap.Plugins &&
-        cap.Plugins.ColumbaAuth
+        cap.Plugins.olumbaAuthPluginPlugin
       ) {
-        return cap.Plugins.ColumbaAuth;
+        return cap.Plugins.olumbaAuthPluginPlugin;
       }
 
       // proxy dinámico
@@ -162,7 +162,7 @@
         try {
 
           return cap.registerPlugin(
-            "ColumbaAuth"
+            "olumbaAuthPluginPlugin"
           );
 
         } catch (e) {
@@ -339,17 +339,17 @@
 
     async function invocarLoginGoogleNativo(payload) {
       const cap = obtenerBridgeCapacitor();
-      const columbaAuth = obtenerPluginColumbaAuth();
+      const olumbaAuthPlugin = obtenerPluginolumbaAuthPlugin();
 
-      if (columbaAuth && typeof columbaAuth.loginGoogle === "function") {
-        return await columbaAuth.loginGoogle(payload);
+      if (olumbaAuthPlugin && typeof olumbaAuthPlugin.loginGoogle === "function") {
+        return await olumbaAuthPlugin.loginGoogle(payload);
       }
 
       if (cap && typeof cap.nativePromise === "function") {
-        return await cap.nativePromise("ColumbaAuth", "loginGoogle", payload);
+        return await cap.nativePromise("olumbaAuthPluginPlugin", "loginGoogle", payload);
       }
 
-      throw new Error("El puente nativo de Capacitor no expone ColumbaAuth.loginGoogle");
+      throw new Error("El puente nativo de Capacitor no expone olumbaAuthPlugin.loginGoogle");
     }
 
     async function iniciarLoginNativoAndroid() {
