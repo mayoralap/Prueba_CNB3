@@ -111,17 +111,13 @@
   </div>
 
   <script type="module">
-    import { SocialLogin } from 'https://cdn.jsdelivr.net/npm/@capgo/capacitor-social-login@8.7.11/+esm';
+    import { Capacitor } from 'https://cdn.jsdelivr.net/npm/@capacitor/core/+esm';
 
+    const CLIENTE_WEB = "498552950849-4cj5lp97qrbqf63jc914ji96lq744m4t.apps.googleusercontent.com";
 
-    const CLIENTE_WEB =
-      "498552950849-4cj5lp97qrbqf63jc914ji96lq744m4t.apps.googleusercontent.com";
+    const CLIENTE_ANDROID = "839165918275-7k8cp04fnbo9id02i2s6ni5pqvvl5om3.apps.googleusercontent.com";
 
-    const CLIENTE_ANDROID =
-      "839165918275-7k8cp04fnbo9id02i2s6ni5pqvvl5om3.apps.googleusercontent.com";
-
-    const URL_APPS_SCRIPT =
-      "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
+    const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
 
     let columbaAuthProxy = null;
 
@@ -145,24 +141,36 @@
     }
 
     function obtenerPluginColumbaAuth() {
-      const cap = obtenerBridgeCapacitor();
-      if (!cap) return null;
 
-      if (cap.Plugins && cap.Plugins.ColumbaAuth) {
+      const cap = window.Capacitor;
+
+      if (!cap) {
+        return null;
+      }
+
+      // plugin ya registrado
+      if (
+        cap.Plugins &&
+        cap.Plugins.ColumbaAuth
+      ) {
         return cap.Plugins.ColumbaAuth;
       }
 
-      if (columbaAuthProxy) {
-        return columbaAuthProxy;
-      }
-
+      // proxy dinámico
       if (typeof cap.registerPlugin === "function") {
+
         try {
-          columbaAuthProxy = cap.registerPlugin("ColumbaAuth");
-          return columbaAuthProxy;
+
+          return cap.registerPlugin(
+            "ColumbaAuth"
+          );
+
         } catch (e) {
-          return (cap.Plugins && cap.Plugins.ColumbaAuth) || null;
+
+          console.error(e);
+
         }
+
       }
 
       return null;
@@ -177,29 +185,88 @@
     }
 
     function actualizarDiagnosticoBridge() {
-      const box = document.getElementById("diagnosticoBridge");
+
+      const box =
+        document.getElementById(
+          "diagnosticoBridge"
+        );
+
       if (!box) return;
 
-      const cap = obtenerBridgeCapacitor();
-      const columbaAuth = obtenerPluginColumbaAuth();
-      const plugins = Object.keys((cap && cap.Plugins) || {});
-      const headers = Array.isArray(cap && cap.PluginHeaders)
-        ? cap.PluginHeaders.map((h) => h.name)
-        : [];
-      const headerColumba = headers.includes("ColumbaAuth");
+      const cap =
+        window.Capacitor || null;
+
+      const plugins =
+        Object.keys(
+          (cap && cap.Plugins) || {}
+        );
+
+      const headers =
+        Array.isArray(cap?.PluginHeaders)
+          ? cap.PluginHeaders.map(
+            h => h.name
+          )
+          : [];
 
       const info = {
-        platform: cap && typeof cap.getPlatform === "function" ? cap.getPlatform() : (esPlataformaNativa() ? "android" : "web"),
-        isNative: esPlataformaNativa(),
-        androidBridge: Boolean(window.androidBridge),
-        nativePromise: Boolean(cap && typeof cap.nativePromise === "function"),
-        headerColumbaAuth: headerColumba,
-        columbaAuthActivo: Boolean(headerColumba || tienePuenteNativoDirecto() || (columbaAuth && typeof columbaAuth.loginGoogle === "function")),
+
+        platform:
+          cap?.getPlatform
+            ? cap.getPlatform()
+            : "desconocido",
+
+        isNative:
+          cap?.isNativePlatform
+            ? cap.isNativePlatform()
+            : false,
+
+        androidBridge:
+          Boolean(window.androidBridge),
+
+        nativePromise:
+          Boolean(
+            cap &&
+            typeof cap.nativePromise ===
+            "function"
+          ),
+
+        registerPlugin:
+          Boolean(
+            cap &&
+            typeof cap.registerPlugin ===
+            "function"
+          ),
+
         plugins,
-        headers
+
+        headers,
+
+        capacitorKeys:
+          Object.keys(cap || {})
+
       };
 
-      box.textContent = "Bridge: " + JSON.stringify(info);
+      console.log(
+        "CAPACITOR:",
+        cap
+      );
+
+      console.log(
+        "PLUGINS:",
+        plugins
+      );
+
+      console.log(
+        "HEADERS:",
+        headers
+      );
+
+      box.textContent =
+        JSON.stringify(
+          info,
+          null,
+          2
+        );
     }
 
     function generarHuellaDigitalNativa() {
@@ -286,54 +353,56 @@
     }
 
     async function iniciarLoginNativoAndroid() {
+
       actualizarDiagnosticoBridge();
 
-      const btn = document.getElementById("btnGoogleLogin");
-      if (!esPlataformaNativa() || !obtenerBridgeCapacitor()) {
-        mostrarAviso(
-          "No se detectó el entorno nativo de Capacitor en Android.",
-          true
-        );
-        return;
-      }
-
       try {
-        if (btn) btn.disabled = true;
-        mostrarAviso("Abriendo selector nativo de cuentas de Google...");
 
         mostrarAviso(
-          "plugins=" +
-          JSON.stringify(
-            Object.keys(
-              (window.Capacitor && window.Capacitor.Plugins) || {}
-            )
-          )
+          "Abriendo selector de Google..."
         );
 
-        const respuesta = await invocarLoginGoogleNativo({
-          webClientId: CLIENTE_WEB,
-          androidClientId: CLIENTE_ANDROID
-        });
+        const respuesta =
+          await invocarLoginGoogleNativo({
+            webClientId: CLIENTE_WEB
+          });
 
-        const token = respuesta && respuesta.token;
+        const token =
+          respuesta?.token ||
+          respuesta?.result?.token;
+
         if (!token) {
-          throw new Error("El plugin nativo no devolvió token");
+
+          mostrarAviso(
+            "Google no devolvió token",
+            true
+          );
+
+          return;
         }
 
-        mostrarAviso("Acceso correcto, redirigiendo...");
-        window.location.href = construirURLFinal(token);
-      } catch (error) {
         mostrarAviso(
-          "Error en autenticación nativa: " + (error && error.message ? error.message : String(error)),
+          "Token recibido"
+        );
+
+        window.location.href =
+          construirURLFinal(token);
+
+      }
+      catch (error) {
+
+        mostrarAviso(
+          error?.message ||
+          String(error),
           true
         );
-      } finally {
-        if (btn) btn.disabled = false;
+
       }
+
     }
 
-    globalThis.ejecutarLoginMovilNativo = iniciarLoginNativoAndroid;
-
+    globalThis.ejecutarLoginMovilNativo =
+      iniciarLoginNativoAndroid;
     window.C = function (resp) {
       if (!resp || !resp.credential) {
         mostrarAviso("No se recibió credencial de Google Web", true);
