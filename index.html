@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Columba Notebook – Verificación de Identidad v6.6.6</title>
+  <title>Columba Notebook – Verificación de Identidad v6.6.7</title>
 
   <style>
     :root {
@@ -96,7 +96,7 @@
     <img src="https://drive.google.com/thumbnail?id=15hTMpm_5aNuU2QKTWZGdK2XKdtpEog4w" class="logo-img"
       alt="Columba Notebook">
 
-    <h2>Verificación de Identidad v6.6.6</h2>
+    <h2>Verificación de Identidad v6.6.7</h2>
 
     <p>
       Para verificar el estado de tu cuenta inicia sesión con Google.
@@ -140,7 +140,7 @@
     return null;
   }
 
-  async function esperarPluginColumbaAuth(intentosMax = 25, intervaloMs = 150) {
+  async function esperarPluginColumbaAuth(intentosMax = 30, intervaloMs = 150) {
     for (let i = 0; i < intentosMax; i++) {
       const plugin = obtenerPluginColumbaAuthDirecto();
       if (plugin && typeof plugin.loginGoogle === "function") {
