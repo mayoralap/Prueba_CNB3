@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Columba Notebook – Verificación de Identidad v7.0.5</title>
+  <title>Columba Notebook – Verificación de Identidad v7.0.6</title>
 
   <style>
     :root {
@@ -38,6 +38,12 @@
     .app-logo {
       width: 120px;
       margin-bottom: 20px;
+    }
+
+    .logo-img {
+      width: 120px;
+      margin-bottom: 16px;
+      border-radius: 10px;
     }
 
     #buttonDiv {
@@ -94,10 +100,9 @@
 
   <div class="main-card">
 
-    <!-- <img src="img/ico_ColumbaNotebook-PRO.png" alt="Logo Columba Notebook Pro" class="app-logo"> -->
     <img src="https://drive.google.com/thumbnail?id=15hTMpm_5aNuU2QKTWZGdK2XKdtpEog4w" alt="Logo Columba Notebook"
       class="logo-img">
-    <h2>Verificación de Identidad v7.0.5</h2>
+    <h2>Verificación de Identidad v7.0.6</h2>
 
     <p>
       Para verificar el estado de tu cuenta inicia sesión con Google.
@@ -118,6 +123,8 @@
     const URL_APPS_SCRIPT =
       "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
 
+    let redirigiendoConToken = false;
+
     function mostrarAviso(texto, error = false) {
       const m = document.getElementById("mensaje");
       if (!m) return;
@@ -135,7 +142,7 @@
         cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()
       );
       const uaNativo = navigator.userAgent.includes("ColumbaAppNative");
-      const bridgeNativo = Boolean(window.androidBridge);
+      const bridgeNativo = Boolean(window.ColumbaNativeBridge || window.androidBridge);
       return capNativo || uaNativo || bridgeNativo;
     }
 
@@ -204,6 +211,20 @@
       );
     }
 
+    function redirigirConToken(token) {
+      const limpio = String(token || "").trim();
+      if (!limpio) {
+        mostrarAviso("Google no devolvió token de sesión.", true);
+        const btn = document.getElementById("btnGoogleNativo");
+        if (btn) btn.disabled = false;
+        return;
+      }
+      if (redirigiendoConToken) return;
+      redirigiendoConToken = true;
+      mostrarAviso("Token recibido, redirigiendo...");
+      window.location.href = construirURLFinal(limpio);
+    }
+
     function capturarTokenDeUrl() {
       const params = new URLSearchParams(window.location.search);
       const queryToken =
@@ -238,6 +259,7 @@
         entorno: nativo ? "nativo-android" : "web-github",
         origen: window.location.origin,
         uaNativo: navigator.userAgent.includes("ColumbaAppNative"),
+        bridgeNativo: Boolean(window.ColumbaNativeBridge && typeof window.ColumbaNativeBridge.loginGoogle === "function"),
         capacitorDetectado: Boolean(cap),
         columbaAuthDisponible: Boolean(plugin && typeof plugin.loginGoogle === "function"),
         deviceId: obtenerOGenerarDeviceId(),
@@ -249,130 +271,136 @@
     }
 
     window.__columbaNativeAuth = window.__columbaNativeAuth || {
-  pendingToken: null,
-  pendingError: null,
-  onToken: null,
-  onError: null
-};
-
-window.onNativeGoogleToken = function (token) {
-  const limpio = String(token || "").trim();
-  window.__columbaNativeAuth.pendingToken = limpio;
-  window.__columbaNativeAuth.pendingError = null;
-  if (typeof window.__columbaNativeAuth.onToken === "function") {
-    const cb = window.__columbaNativeAuth.onToken;
-    window.__columbaNativeAuth.onToken = null;
-    window.__columbaNativeAuth.onError = null;
-    cb(limpio);
-  }
-};
-
-window.onNativeGoogleError = function (errMsg) {
-  const msg = String(errMsg || "Error en login nativo");
-  window.__columbaNativeAuth.pendingError = msg;
-  if (typeof window.__columbaNativeAuth.onError === "function") {
-    const cb = window.__columbaNativeAuth.onError;
-    window.__columbaNativeAuth.onToken = null;
-    window.__columbaNativeAuth.onError = null;
-    cb(msg);
-  }
-};
-
-function invocarLoginGoogleNativo(payload) {
-  const authState = window.__columbaNativeAuth || (window.__columbaNativeAuth = {
-    pendingToken: null,
-    pendingError: null,
-    onToken: null,
-    onError: null
-  });
-
-  return new Promise(async (resolve, reject) => {
-    authState.pendingToken = null;
-    authState.pendingError = null;
-
-    let finalizado = false;
-
-    const timer = setTimeout(() => {
-      if (finalizado) return;
-      finalizado = true;
-      authState.onToken = null;
-      authState.onError = null;
-      reject(new Error("Tiempo de espera agotado esperando el token de Google Sign-In."));
-    }, 45000);
-
-    const resolverConToken = (token) => {
-      if (finalizado) return;
-      finalizado = true;
-      clearTimeout(timer);
-      authState.onToken = null;
-      authState.onError = null;
-      authState.pendingToken = null;
-      resolve({ token });
+      pendingToken: null,
+      pendingError: null,
+      onToken: null,
+      onError: null
     };
 
-    const rechazarConError = (err) => {
-      if (finalizado) return;
-      finalizado = true;
-      clearTimeout(timer);
-      authState.onToken = null;
-      authState.onError = null;
-      authState.pendingError = null;
-      reject(err instanceof Error ? err : new Error(String(err || "Error en login nativo")));
+    window.onNativeGoogleToken = function (token) {
+      const limpio = String(token || "").trim();
+      window.__columbaNativeAuth.pendingToken = limpio;
+      window.__columbaNativeAuth.pendingError = null;
+      if (typeof window.__columbaNativeAuth.onToken === "function") {
+        const cb = window.__columbaNativeAuth.onToken;
+        window.__columbaNativeAuth.onToken = null;
+        window.__columbaNativeAuth.onError = null;
+        cb(limpio);
+      } else if (limpio) {
+        redirigirConToken(limpio);
+      }
     };
 
-    const hasBridge = Boolean(window.ColumbaNativeBridge);
-    const hasLoginGoogle = Boolean(
-      window.ColumbaNativeBridge && typeof window.ColumbaNativeBridge.loginGoogle === "function"
-    );
-
-    console.log("[ColumbaAuth] click boton login", {
-      hasBridge,
-      hasLoginGoogle,
-      webClientIdPresent: Boolean(payload && payload.webClientId),
-      ua: navigator.userAgent
-    });
-
-    if (hasLoginGoogle) {
-      authState.onToken = (token) => resolverConToken(token);
-      authState.onError = (errMsg) => rechazarConError(errMsg);
-
-      // Por si un token o error llegó antes de registrar el callback en esta instancia
-      if (authState.pendingToken) {
-        resolverConToken(authState.pendingToken);
-        return;
+    window.onNativeGoogleError = function (errMsg) {
+      const msg = String(errMsg || "Error en login nativo");
+      window.__columbaNativeAuth.pendingError = msg;
+      if (typeof window.__columbaNativeAuth.onError === "function") {
+        const cb = window.__columbaNativeAuth.onError;
+        window.__columbaNativeAuth.onToken = null;
+        window.__columbaNativeAuth.onError = null;
+        cb(msg);
+      } else {
+        mostrarAviso(msg, true);
+        const btn = document.getElementById("btnGoogleNativo");
+        if (btn) btn.disabled = false;
       }
-      if (authState.pendingError) {
-        rechazarConError(authState.pendingError);
-        return;
-      }
+    };
 
-      try {
-        window.ColumbaNativeBridge.loginGoogle((payload && payload.webClientId) || "");
-      } catch (e) {
-        rechazarConError(e);
-      }
-      return;
-    }
+    function invocarLoginGoogleNativo(payload) {
+      const authState = window.__columbaNativeAuth || (window.__columbaNativeAuth = {
+        pendingToken: null,
+        pendingError: null,
+        onToken: null,
+        onError: null
+      });
 
-    if (typeof esperarPluginColumbaAuth === "function") {
-      try {
-        const plugin = await esperarPluginColumbaAuth();
-        if (plugin && typeof plugin.loginGoogle === "function") {
-          plugin.loginGoogle(payload).then((res) => {
-            const token = res && typeof res === "object" ? res.token : res;
-            resolverConToken(token);
-          }).catch(rechazarConError);
+      return new Promise(async (resolve, reject) => {
+        authState.pendingToken = null;
+        authState.pendingError = null;
+        redirigiendoConToken = false;
+
+        let finalizado = false;
+
+        const timer = setTimeout(() => {
+          if (finalizado) return;
+          finalizado = true;
+          authState.onToken = null;
+          authState.onError = null;
+          reject(new Error("Tiempo de espera agotado esperando el token de Google Sign-In."));
+        }, 45000);
+
+        const resolverConToken = (token) => {
+          if (finalizado) return;
+          finalizado = true;
+          clearTimeout(timer);
+          authState.onToken = null;
+          authState.onError = null;
+          authState.pendingToken = null;
+          resolve({ token });
+        };
+
+        const rechazarConError = (err) => {
+          if (finalizado) return;
+          finalizado = true;
+          clearTimeout(timer);
+          authState.onToken = null;
+          authState.onError = null;
+          authState.pendingError = null;
+          reject(err instanceof Error ? err : new Error(String(err || "Error en login nativo")));
+        };
+
+        const hasBridge = Boolean(window.ColumbaNativeBridge);
+        const hasLoginGoogle = Boolean(
+          window.ColumbaNativeBridge && typeof window.ColumbaNativeBridge.loginGoogle === "function"
+        );
+
+        console.log("[ColumbaAuth] click boton login", {
+          hasBridge,
+          hasLoginGoogle,
+          webClientIdPresent: Boolean(payload && payload.webClientId),
+          ua: navigator.userAgent
+        });
+
+        if (hasLoginGoogle) {
+          authState.onToken = (token) => resolverConToken(token);
+          authState.onError = (errMsg) => rechazarConError(errMsg);
+
+          if (authState.pendingToken) {
+            resolverConToken(authState.pendingToken);
+            return;
+          }
+          if (authState.pendingError) {
+            rechazarConError(authState.pendingError);
+            return;
+          }
+
+          try {
+            window.ColumbaNativeBridge.loginGoogle((payload && payload.webClientId) || "");
+          } catch (e) {
+            rechazarConError(e);
+          }
           return;
         }
-      } catch (e) {
-        rechazarConError(e);
-        return;
-      }
-    }
 
-    rechazarConError("No se encontró ningún puente nativo disponible (ColumbaNativeBridge / ColumbaAuth)");
-  });
-}
+        if (typeof esperarPluginColumbaAuth === "function") {
+          try {
+            const plugin = await esperarPluginColumbaAuth();
+            if (plugin && typeof plugin.loginGoogle === "function") {
+              plugin.loginGoogle(payload).then((res) => {
+                const token = res && typeof res === "object" ? res.token : res;
+                resolverConToken(token);
+              }).catch(rechazarConError);
+              return;
+            }
+          } catch (e) {
+            rechazarConError(e);
+            return;
+          }
+        }
+
+        rechazarConError("No se encontró ningún puente nativo disponible (ColumbaNativeBridge / ColumbaAuth)");
+      });
+    }
 
     async function iniciarLoginNativoAndroid() {
       const btn = document.getElementById("btnGoogleNativo");
@@ -391,8 +419,7 @@ function invocarLoginGoogleNativo(payload) {
           return;
         }
 
-        mostrarAviso("Token recibido, redirigiendo...");
-        window.location.href = construirURLFinal(token);
+        redirigirConToken(token);
       } catch (error) {
         mostrarAviso(error?.message || String(error), true);
         if (btn) btn.disabled = false;
@@ -421,8 +448,7 @@ function invocarLoginGoogleNativo(payload) {
         return;
       }
 
-      mostrarAviso("Acceso correcto, redirigiendo...");
-      window.location.href = construirURLFinal(resp.credential);
+      redirigirConToken(resp.credential);
     };
 
     function cargarScriptGISWeb() {
@@ -445,10 +471,16 @@ function invocarLoginGoogleNativo(payload) {
     async function inicializar() {
       actualizarDiagnostico();
 
+      const pendingToken = window.__columbaNativeAuth && window.__columbaNativeAuth.pendingToken;
+      if (pendingToken) {
+        window.__columbaNativeAuth.pendingToken = null;
+        redirigirConToken(pendingToken);
+        return;
+      }
+
       const tokenRetorno = capturarTokenDeUrl();
       if (tokenRetorno) {
-        mostrarAviso("Token recibido, redirigiendo...");
-        window.location.href = construirURLFinal(tokenRetorno);
+        redirigirConToken(tokenRetorno);
         return;
       }
 
