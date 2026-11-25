@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Columba Notebook – Verificación de Identidad v7.0.7</title>
+  <title>Columba Notebook – Verificación de Identidad v6.6.7</title>
 
   <style>
     :root {
@@ -37,8 +37,7 @@
 
     .logo-img {
       width: 120px;
-      margin-bottom: 16px;
-      border-radius: 10px;
+      margin-bottom: 20px;
     }
 
     #buttonDiv {
@@ -56,7 +55,7 @@
       word-break: break-word;
     }
 
-    #diagnosticoWeb {
+    #diagnosticoBridge {
       margin-top: 14px;
       padding: 10px;
       font-size: 12px;
@@ -65,10 +64,9 @@
       border-radius: 8px;
       color: #3c4043;
       word-break: break-word;
-      white-space: pre-wrap;
     }
 
-    .btn-google-nativo {
+    .btn-google {
       width: 290px;
       height: 42px;
       border: none;
@@ -80,13 +78,18 @@
       font-size: 14px;
     }
 
-    .btn-google-nativo:hover {
+    .btn-google:hover {
       background: #1558b0;
     }
 
-    .btn-google-nativo:disabled {
+    .btn-google:disabled {
       background: #9aa0a6;
       cursor: not-allowed;
+    }
+
+    .app-logo {
+      width: 120px;
+      margin-bottom: 20px;
     }
   </style>
 </head>
@@ -95,9 +98,12 @@
 
   <div class="main-card">
 
-    <img src="https://drive.google.com/thumbnail?id=15hTMpm_5aNuU2QKTWZGdK2XKdtpEog4w" alt="Logo Columba Notebook"
-      class="logo-img">
-    <h2>Verificación de Identidad v7.0.7</h2>
+    <!-- <img src="https://drive.google.com/thumbnail?id=15hTMpm_5aNuU2QKTWZGdK2XKdtpEog4w" class="logo-img"
+      alt="Columba Notebook"> -->
+
+    <!-- Logotipo local oficial -->
+    <img src="img/ico_ColumbaNotebook-PRO.png" alt="Logo Columba Notebook Pro" class="app-logo">
+    <h2>Verificación de Identidad v6.6.7</h2>
 
     <p>
       Para verificar el estado de tu cuenta inicia sesión con Google.
@@ -107,26 +113,20 @@
 
     <div id="mensaje"></div>
 
-    <div id="diagnosticoWeb"></div>
+    <div id="diagnosticoBridge"></div>
 
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@capacitor/core@6/dist/capacitor.js"></script>
   <script>
     const CLIENTE_WEB =
       "839165918275-9e3pbpo84he4ti6m038ldbg21cj37fdr.apps.googleusercontent.com";
 
+    const CLIENTE_ANDROID =
+      "839165918275-7k8cp04fnbo9id02i2s6ni5pqvvl5om3.apps.googleusercontent.com";
+
     const URL_APPS_SCRIPT =
       "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
-
-    const CLAVE_TOKEN_TEMP = "cn_native_pending_token_v706";
-    let redirigiendoConToken = false;
-
-    window.__columbaNativeAuth = window.__columbaNativeAuth || {
-      pendingToken: null,
-      pendingError: null,
-      onToken: null,
-      onError: null
-    };
 
     function mostrarAviso(texto, error = false) {
       const m = document.getElementById("mensaje");
@@ -135,40 +135,61 @@
       m.textContent = texto;
     }
 
-    function obtenerCapacitor() {
+    function obtenerBridgeCapacitor() {
       return window.Capacitor || null;
     }
 
-    function obtenerPluginColumbaAuth() {
-      const cap = obtenerCapacitor();
+    function obtenerPluginColumbaAuthDirecto() {
+      const cap = obtenerBridgeCapacitor();
       if (cap && cap.Plugins && cap.Plugins.ColumbaAuth) {
         return cap.Plugins.ColumbaAuth;
       }
       return null;
     }
 
-    function esEntornoNativo() {
-      const cap = obtenerCapacitor();
-      const capNativo = Boolean(
-        cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()
-      );
-      const uaNativo = navigator.userAgent.includes("ColumbaAppNative");
-      const bridgeNativo = Boolean(window.ColumbaNativeBridge || window.androidBridge);
-      return capNativo || uaNativo || bridgeNativo;
-    }
-
-    async function esperarPluginColumbaAuth(intentosMax = 25, intervaloMs = 150) {
+    async function esperarPluginColumbaAuth(intentosMax = 30, intervaloMs = 150) {
       for (let i = 0; i < intentosMax; i++) {
-        const plugin = obtenerPluginColumbaAuth();
+        const plugin = obtenerPluginColumbaAuthDirecto();
         if (plugin && typeof plugin.loginGoogle === "function") {
           return plugin;
         }
-        await new Promise((resolve) => setTimeout(resolve, intervaloMs));
+        await new Promise((r) => setTimeout(r, intervaloMs));
       }
       return null;
     }
 
-    function generarHuellaDigitalWeb() {
+    function esPlataformaNativa() {
+      const cap = obtenerBridgeCapacitor();
+      if (cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()) {
+        return true;
+      }
+      return Boolean(window.androidBridge) || navigator.userAgent.includes("ColumbaAppNative");
+    }
+
+    function actualizarDiagnosticoBridge() {
+      const box = document.getElementById("diagnosticoBridge");
+      if (!box) return;
+
+      const cap = obtenerBridgeCapacitor();
+      const plugins = Object.keys((cap && cap.Plugins) || {});
+      const headers = Array.isArray(cap?.PluginHeaders)
+        ? cap.PluginHeaders.map((h) => h.name)
+        : [];
+
+      const info = {
+        platform: cap?.getPlatform ? cap.getPlatform() : "desconocido",
+        isNative: cap?.isNativePlatform ? cap.isNativePlatform() : false,
+        androidBridge: Boolean(window.androidBridge),
+        tieneColumbaAuth: Boolean(obtenerPluginColumbaAuthDirecto()),
+        plugins,
+        headers
+      };
+
+      console.log("PLUGINS:", plugins.join(","));
+      box.textContent = JSON.stringify(info, null, 2);
+    }
+
+    function generarHuellaDigitalNativa() {
       const raw = [
         navigator.userAgent,
         navigator.language,
@@ -202,7 +223,7 @@
 
     function construirURLFinal(token) {
       const deviceId = obtenerOGenerarDeviceId();
-      const huellaDigital = generarHuellaDigitalWeb();
+      const huellaDigital = generarHuellaDigitalNativa();
       const devName = navigator.userAgent;
 
       return (
@@ -212,25 +233,6 @@
         "&devName=" + encodeURIComponent(devName) +
         "&huellaDigital=" + encodeURIComponent(huellaDigital)
       );
-    }
-
-    function redirigirConToken(token) {
-      const limpio = String(token || "").trim();
-      if (!limpio) {
-        mostrarAviso("Google no devolvió token de sesión.", true);
-        const btn = document.getElementById("btnGoogleNativo");
-        if (btn) btn.disabled = false;
-        return;
-      }
-      if (redirigiendoConToken) return;
-      redirigiendoConToken = true;
-
-      try {
-        sessionStorage.removeItem(CLAVE_TOKEN_TEMP);
-      } catch (_) {}
-
-      mostrarAviso("Token recibido, redirigiendo...");
-      window.location.href = construirURLFinal(limpio);
     }
 
     function capturarTokenDeUrl() {
@@ -255,217 +257,76 @@
       return null;
     }
 
-    function actualizarDiagnostico() {
-      const box = document.getElementById("diagnosticoWeb");
-      if (!box) return;
-
-      const nativo = esEntornoNativo();
-      const cap = obtenerCapacitor();
-      const plugin = obtenerPluginColumbaAuth();
-
-      const info = {
-        entorno: nativo ? "nativo-android" : "web-github",
-        origen: window.location.origin,
-        uaNativo: navigator.userAgent.includes("ColumbaAppNative"),
-        columbaBridge: Boolean(
-          window.ColumbaNativeBridge && typeof window.ColumbaNativeBridge.loginGoogle === "function"
-        ),
-        capacitorDetectado: Boolean(cap),
-        columbaAuthDisponible: Boolean(plugin && typeof plugin.loginGoogle === "function"),
-        deviceId: obtenerOGenerarDeviceId(),
-        huellaDigital: generarHuellaDigitalWeb(),
-        gisCargado: Boolean(window.google && window.google.accounts && window.google.accounts.id)
-      };
-
-      box.textContent = JSON.stringify(info, null, 2);
-    }
-
-    window.onNativeGoogleToken = function (token) {
-      const limpio = String(token || "").trim();
-      window.__columbaNativeAuth.pendingToken = limpio;
-      window.__columbaNativeAuth.pendingError = null;
-      try {
-        if (limpio) sessionStorage.setItem(CLAVE_TOKEN_TEMP, limpio);
-      } catch (_) {}
-
-      if (typeof window.__columbaNativeAuth.onToken === "function") {
-        const cb = window.__columbaNativeAuth.onToken;
-        window.__columbaNativeAuth.onToken = null;
-        window.__columbaNativeAuth.onError = null;
-        cb(limpio);
-      } else if (limpio) {
-        redirigirConToken(limpio);
+    async function invocarLoginGoogleNativo(payload) {
+      const columbaAuth = await esperarPluginColumbaAuth();
+      if (columbaAuth && typeof columbaAuth.loginGoogle === "function") {
+        return await columbaAuth.loginGoogle(payload);
       }
-    };
 
-    window.onNativeGoogleError = function (errMsg) {
-      const msg = String(errMsg || "Error en login nativo");
-      window.__columbaNativeAuth.pendingError = msg;
-
-      if (typeof window.__columbaNativeAuth.onError === "function") {
-        const cb = window.__columbaNativeAuth.onError;
-        window.__columbaNativeAuth.onToken = null;
-        window.__columbaNativeAuth.onError = null;
-        cb(msg);
-      } else {
-        mostrarAviso(msg, true);
-        const btn = document.getElementById("btnGoogleNativo");
-        if (btn) btn.disabled = false;
+      const cap = obtenerBridgeCapacitor();
+      if (cap && typeof cap.nativePromise === "function") {
+        return await cap.nativePromise("ColumbaAuth", "loginGoogle", payload);
       }
-    };
 
-    function invocarLoginGoogleNativo(payload) {
-      const authState = window.__columbaNativeAuth || (window.__columbaNativeAuth = {
-        pendingToken: null,
-        pendingError: null,
-        onToken: null,
-        onError: null
-      });
-
-      return new Promise(async (resolve, reject) => {
-        authState.pendingToken = null;
-        authState.pendingError = null;
-        redirigiendoConToken = false;
-        try {
-          sessionStorage.removeItem(CLAVE_TOKEN_TEMP);
-        } catch (_) {}
-
-        let finalizado = false;
-
-        const timer = setTimeout(() => {
-          if (finalizado) return;
-          finalizado = true;
-          authState.onToken = null;
-          authState.onError = null;
-          reject(new Error("Tiempo de espera agotado esperando el token de Google Sign-In."));
-        }, 45000);
-
-        const resolverConToken = (token) => {
-          if (finalizado) return;
-          finalizado = true;
-          clearTimeout(timer);
-          authState.onToken = null;
-          authState.onError = null;
-          authState.pendingToken = null;
-          resolve({ token });
-        };
-
-        const rechazarConError = (err) => {
-          if (finalizado) return;
-          finalizado = true;
-          clearTimeout(timer);
-          authState.onToken = null;
-          authState.onError = null;
-          authState.pendingError = null;
-          reject(err instanceof Error ? err : new Error(String(err || "Error en login nativo")));
-        };
-
-        const hasBridge = Boolean(window.ColumbaNativeBridge);
-        const hasLoginGoogle = Boolean(
-          window.ColumbaNativeBridge && typeof window.ColumbaNativeBridge.loginGoogle === "function"
-        );
-
-        console.log("[ColumbaAuth] click boton login", {
-          hasBridge,
-          hasLoginGoogle,
-          webClientIdPresent: Boolean(payload && payload.webClientId),
-          ua: navigator.userAgent
-        });
-
-        if (hasLoginGoogle) {
-          authState.onToken = (token) => resolverConToken(token);
-          authState.onError = (errMsg) => rechazarConError(errMsg);
-
-          if (authState.pendingToken) {
-            resolverConToken(authState.pendingToken);
-            return;
-          }
-          if (authState.pendingError) {
-            rechazarConError(authState.pendingError);
-            return;
-          }
-
-          try {
-            window.ColumbaNativeBridge.loginGoogle((payload && payload.webClientId) || "");
-          } catch (e) {
-            rechazarConError(e);
-          }
-          return;
-        }
-
-        if (typeof esperarPluginColumbaAuth === "function") {
-          try {
-            const plugin = await esperarPluginColumbaAuth();
-            if (plugin && typeof plugin.loginGoogle === "function") {
-              plugin.loginGoogle(payload).then((res) => {
-                const token = res && typeof res === "object" ? res.token : res;
-                resolverConToken(token);
-              }).catch(rechazarConError);
-              return;
-            }
-          } catch (e) {
-            rechazarConError(e);
-            return;
-          }
-        }
-
-        rechazarConError("No se encontró ningún puente nativo disponible (ColumbaNativeBridge / ColumbaAuth)");
-      });
+      throw new Error("El puente nativo de Android no expuso ColumbaAuth.loginGoogle");
     }
 
     async function iniciarLoginNativoAndroid() {
-      const btn = document.getElementById("btnGoogleNativo");
-      if (btn) btn.disabled = true;
+  actualizarDiagnosticoBridge();
 
-      try {
-        mostrarAviso("Abriendo selector nativo de Google...");
-        const respuesta = await invocarLoginGoogleNativo({
-          webClientId: CLIENTE_WEB
-        });
+  try {
+    mostrarAviso("Abriendo selector de Google...");
 
-        const token = respuesta?.token || respuesta?.result?.token;
-        if (!token) {
-          mostrarAviso("Google no devolvió token de sesión.", true);
-          if (btn) btn.disabled = false;
-          return;
-        }
+    const respuesta = await invocarLoginGoogleNativo({
+      webClientId: CLIENTE_WEB
+    });
 
-        redirigirConToken(token);
-      } catch (error) {
-        mostrarAviso(error?.message || String(error), true);
-        if (btn) btn.disabled = false;
-      }
+    const token =
+      respuesta?.token ||
+      respuesta?.result?.token;
+
+    if (!token) {
+      mostrarAviso("Google no devolvió token", true);
+      return;
     }
 
-    function renderizarBotonNativo() {
-      const buttonDiv = document.getElementById("buttonDiv");
-      if (!buttonDiv) return;
+    mostrarAviso("Token recibido");
+    const urlFinal = construirURLFinal(token);
 
-      buttonDiv.innerHTML = `
-        <button id="btnGoogleNativo" type="button" class="btn-google-nativo">
-          Iniciar sesión con Google (App)
-        </button>
-      `;
-
-      const btn = document.getElementById("btnGoogleNativo");
-      if (btn) {
-        btn.addEventListener("click", iniciarLoginNativoAndroid);
-      }
+    if (window.Capacitor?.Plugins?.Browser?.open) {
+      await window.Capacitor.Plugins.Browser.open({
+        url: urlFinal
+      });
+    } else {
+      window.location.href = urlFinal;
     }
+  } catch (error) {
+    mostrarAviso(error?.message || String(error), true);
+  }
+}
 
-    window.C = function (resp) {
-      if (!resp || !resp.credential) {
-        mostrarAviso("No se recibió credencial de Google Web.", true);
-        return;
-      }
+globalThis.ejecutarLoginMovilNativo = iniciarLoginNativoAndroid;
 
-      redirigirConToken(resp.credential);
-    };
+window.C = async function (resp) {
+  if (!resp || !resp.credential) {
+    mostrarAviso("No se recibió credencial de Google Web", true);
+    return;
+  }
 
-    function cargarScriptGISWeb() {
-      if (window.google && window.google.accounts && window.google.accounts.id) {
-        return Promise.resolve(true);
-      }
+  mostrarAviso("Acceso correcto, redirigiendo...");
+  const urlFinal = construirURLFinal(resp.credential);
+
+  if (window.Capacitor?.Plugins?.Browser?.open) {
+    await window.Capacitor.Plugins.Browser.open({
+      url: urlFinal
+    });
+  } else {
+    window.location.href = urlFinal;
+  }
+};
+
+    async function cargarScriptGISWeb() {
+      if (window.google && window.google.accounts && window.google.accounts.id) return true;
 
       return new Promise((resolve) => {
         const script = document.createElement("script");
@@ -479,38 +340,38 @@
       });
     }
 
+    function renderizarBotonNativoAndroid() {
+      const buttonDiv = document.getElementById("buttonDiv");
+      buttonDiv.innerHTML = `
+        <button id="btnGoogleLogin" type="button" class="btn-google">
+          Iniciar sesión con Google
+        </button>
+      `;
+
+      const btn = document.getElementById("btnGoogleLogin");
+      if (btn) {
+        btn.addEventListener("click", iniciarLoginNativoAndroid);
+      }
+    }
+
     async function inicializar() {
-      actualizarDiagnostico();
-
-      let tokenPendiente = window.__columbaNativeAuth && window.__columbaNativeAuth.pendingToken;
-      if (!tokenPendiente) {
-        try {
-          tokenPendiente = sessionStorage.getItem(CLAVE_TOKEN_TEMP);
-        } catch (_) {}
-      }
-
-      if (tokenPendiente) {
-        window.__columbaNativeAuth.pendingToken = null;
-        redirigirConToken(tokenPendiente);
-        return;
-      }
+      actualizarDiagnosticoBridge();
 
       const tokenRetorno = capturarTokenDeUrl();
       if (tokenRetorno) {
-        redirigirConToken(tokenRetorno);
+        mostrarAviso("Token recibido, redirigiendo...");
+        window.location.href = construirURLFinal(tokenRetorno);
         return;
       }
 
-      if (esEntornoNativo()) {
-        renderizarBotonNativo();
+      if (esPlataformaNativa()) {
+        renderizarBotonNativoAndroid();
         await esperarPluginColumbaAuth();
-        actualizarDiagnostico();
+        actualizarDiagnosticoBridge();
         return;
       }
 
       const gisListo = await cargarScriptGISWeb();
-      actualizarDiagnostico();
-
       if (gisListo && window.google && window.google.accounts && window.google.accounts.id) {
         google.accounts.id.initialize({
           client_id: CLIENTE_WEB,
