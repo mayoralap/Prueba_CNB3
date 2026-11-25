@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Columba Notebook – Verificación de Identidad v7.0.3</title>
+  <title>Columba Notebook – Verificación de Identidad v7.0.4</title>
 
   <style>
     :root {
@@ -97,7 +97,7 @@
     <!-- <img src="img/ico_ColumbaNotebook-PRO.png" alt="Logo Columba Notebook Pro" class="app-logo"> -->
     <img src="https://drive.google.com/thumbnail?id=15hTMpm_5aNuU2QKTWZGdK2XKdtpEog4w" alt="Logo Columba Notebook"
       class="logo-img">
-    <h2>Verificación de Identidad v7.0.3</h2>
+    <h2>Verificación de Identidad v7.0.4</h2>
 
     <p>
       Para verificar el estado de tu cuenta inicia sesión con Google.
@@ -248,56 +248,95 @@
       box.textContent = JSON.stringify(info, null, 2);
     }
 
-    function invocarLoginGoogleNativo(payload) {
-      return new Promise(async (resolve, reject) => {
-        window.__columbaNativeAuth.pendingToken = null;
-        window.__columbaNativeAuth.pendingError = null;
+    window.__columbaNativeAuth = window.__columbaNativeAuth || {
+  pendingToken: null,
+  pendingError: null,
+  onToken: null,
+  onError: null
+};
 
-        let finalizado = false;
+window.onNativeGoogleToken = function (token) {
+  const limpio = String(token || "").trim();
+  window.__columbaNativeAuth.pendingToken = limpio;
+  window.__columbaNativeAuth.pendingError = null;
+  if (typeof window.__columbaNativeAuth.onToken === "function") {
+    const cb = window.__columbaNativeAuth.onToken;
+    window.__columbaNativeAuth.onToken = null;
+    window.__columbaNativeAuth.onError = null;
+    cb(limpio);
+  }
+};
 
-        const timer = setTimeout(() => {
-          if (finalizado) return;
-          finalizado = true;
-          window.__columbaNativeAuth.onToken = null;
-          window.__columbaNativeAuth.onError = null;
-          reject(new Error("Tiempo de espera agotado esperando el token de Google Sign-In."));
-        }, 45000);
+window.onNativeGoogleError = function (errMsg) {
+  const msg = String(errMsg || "Error en login nativo");
+  window.__columbaNativeAuth.pendingError = msg;
+  if (typeof window.__columbaNativeAuth.onError === "function") {
+    const cb = window.__columbaNativeAuth.onError;
+    window.__columbaNativeAuth.onToken = null;
+    window.__columbaNativeAuth.onError = null;
+    cb(msg);
+  }
+};
 
-        const resolverConToken = (token) => {
-          if (finalizado) return;
-          finalizado = true;
-          clearTimeout(timer);
-          resolve({ token });
-        };
+function invocarLoginGoogleNativo(payload) {
+  const authState = window.__columbaNativeAuth || (window.__columbaNativeAuth = {
+    pendingToken: null,
+    pendingError: null,
+    onToken: null,
+    onError: null
+  });
 
-        const rechazarConError = (err) => {
-          if (finalizado) return;
-          finalizado = true;
-          clearTimeout(timer);
-          reject(err instanceof Error ? err : new Error(String(err || "Error en login nativo")));
-        };
+  return new Promise(async (resolve, reject) => {
+    authState.pendingToken = null;
+    authState.pendingError = null;
 
-        if (window.ColumbaNativeBridge && typeof window.ColumbaNativeBridge.loginGoogle === "function") {
-          window.__columbaNativeAuth.onToken = (token) => resolverConToken(token);
-          window.__columbaNativeAuth.onError = (errMsg) => rechazarConError(errMsg);
+    let finalizado = false;
 
-          try {
-            window.ColumbaNativeBridge.loginGoogle(payload.webClientId || "");
-          } catch (e) {
-            rechazarConError(e);
-          }
-          return;
-        }
+    const timer = setTimeout(() => {
+      if (finalizado) return;
+      finalizado = true;
+      authState.onToken = null;
+      authState.onError = null;
+      reject(new Error("Tiempo de espera agotado esperando el token de Google Sign-In."));
+    }, 45000);
 
-        const plugin = await esperarPluginColumbaAuth();
-        if (plugin && typeof plugin.loginGoogle === "function") {
-          plugin.loginGoogle(payload).then(resolverConToken).catch(rechazarConError);
-          return;
-        }
+    const resolverConToken = (token) => {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timer);
+      resolve({ token });
+    };
 
-        rechazarConError("No se encontró ningún puente nativo disponible (ColumbaNativeBridge / ColumbaAuth)");
-      });
+    const rechazarConError = (err) => {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timer);
+      reject(err instanceof Error ? err : new Error(String(err || "Error en login nativo")));
+    };
+
+    if (window.ColumbaNativeBridge && typeof window.ColumbaNativeBridge.loginGoogle === "function") {
+      authState.onToken = (token) => resolverConToken(token);
+      authState.onError = (errMsg) => rechazarConError(errMsg);
+
+      try {
+        window.ColumbaNativeBridge.loginGoogle((payload && payload.webClientId) || "");
+      } catch (e) {
+        rechazarConError(e);
+      }
+      return;
     }
+
+    if (typeof esperarPluginColumbaAuth === "function") {
+      const plugin = await esperarPluginColumbaAuth();
+      if (plugin && typeof plugin.loginGoogle === "function") {
+        plugin.loginGoogle(payload).then(resolverConToken).catch(rechazarConError);
+        return;
+      }
+    }
+
+    rechazarConError("No se encontró ningún puente nativo disponible (ColumbaNativeBridge / ColumbaAuth)");
+  });
+}
 
     async function iniciarLoginNativoAndroid() {
       const btn = document.getElementById("btnGoogleNativo");
