@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Columba Notebook – Verificación de Identidad v6.6.9</title>
+  <title>Columba Notebook – Verificación de Identidad v7.0.1</title>
 
   <style>
     :root {
@@ -96,7 +96,7 @@
 
     <img src="img/ico_ColumbaNotebook-PRO.png" alt="Logo Columba Notebook Pro" class="app-logo">
 
-    <h2>Verificación de Identidad v6.6.9</h2>
+    <h2>Verificación de Identidad v7.0.1</h2>
 
     <p>
       Para verificar el estado de tu cuenta inicia sesión con Google.
@@ -247,19 +247,38 @@
       box.textContent = JSON.stringify(info, null, 2);
     }
 
-    async function invocarLoginGoogleNativo(payload) {
-      const plugin = await esperarPluginColumbaAuth();
-      if (plugin && typeof plugin.loginGoogle === "function") {
-        return await plugin.loginGoogle(payload);
-      }
+    function invocarLoginGoogleNativo(payload) {
+  return new Promise(async (resolve, reject) => {
+    if (window.ColumbaNativeBridge && typeof window.ColumbaNativeBridge.loginGoogle === "function") {
+      window.onNativeGoogleToken = (token) => {
+        window.onNativeGoogleToken = null;
+        window.onNativeGoogleError = null;
+        resolve({ token });
+      };
 
-      const cap = obtenerCapacitor();
-      if (cap && typeof cap.nativePromise === "function") {
-        return await cap.nativePromise("ColumbaAuth", "loginGoogle", payload);
-      }
+      window.onNativeGoogleError = (errMsg) => {
+        window.onNativeGoogleToken = null;
+        window.onNativeGoogleError = null;
+        reject(new Error(errMsg || "Error en login nativo"));
+      };
 
-      throw new Error("No se encontró el puente nativo ColumbaAuth.loginGoogle");
+      try {
+        window.ColumbaNativeBridge.loginGoogle(payload.webClientId || "");
+      } catch (e) {
+        reject(e);
+      }
+      return;
     }
+
+    const plugin = await esperarPluginColumbaAuth();
+    if (plugin && typeof plugin.loginGoogle === "function") {
+      plugin.loginGoogle(payload).then(resolve).catch(reject);
+      return;
+    }
+
+    reject(new Error("No se encontró ningún puente nativo disponible (ColumbaNativeBridge / ColumbaAuth)"));
+  });
+}
 
     async function iniciarLoginNativoAndroid() {
       const btn = document.getElementById("btnGoogleNativo");
