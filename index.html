@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Columba Notebook – Verificación de Identidad v7.0.4</title>
+  <title>Columba Notebook – Verificación de Identidad v7.0.5</title>
 
   <style>
     :root {
@@ -97,7 +97,7 @@
     <!-- <img src="img/ico_ColumbaNotebook-PRO.png" alt="Logo Columba Notebook Pro" class="app-logo"> -->
     <img src="https://drive.google.com/thumbnail?id=15hTMpm_5aNuU2QKTWZGdK2XKdtpEog4w" alt="Logo Columba Notebook"
       class="logo-img">
-    <h2>Verificación de Identidad v7.0.4</h2>
+    <h2>Verificación de Identidad v7.0.5</h2>
 
     <p>
       Para verificar el estado de tu cuenta inicia sesión con Google.
@@ -304,6 +304,9 @@ function invocarLoginGoogleNativo(payload) {
       if (finalizado) return;
       finalizado = true;
       clearTimeout(timer);
+      authState.onToken = null;
+      authState.onError = null;
+      authState.pendingToken = null;
       resolve({ token });
     };
 
@@ -311,12 +314,37 @@ function invocarLoginGoogleNativo(payload) {
       if (finalizado) return;
       finalizado = true;
       clearTimeout(timer);
+      authState.onToken = null;
+      authState.onError = null;
+      authState.pendingError = null;
       reject(err instanceof Error ? err : new Error(String(err || "Error en login nativo")));
     };
 
-    if (window.ColumbaNativeBridge && typeof window.ColumbaNativeBridge.loginGoogle === "function") {
+    const hasBridge = Boolean(window.ColumbaNativeBridge);
+    const hasLoginGoogle = Boolean(
+      window.ColumbaNativeBridge && typeof window.ColumbaNativeBridge.loginGoogle === "function"
+    );
+
+    console.log("[ColumbaAuth] click boton login", {
+      hasBridge,
+      hasLoginGoogle,
+      webClientIdPresent: Boolean(payload && payload.webClientId),
+      ua: navigator.userAgent
+    });
+
+    if (hasLoginGoogle) {
       authState.onToken = (token) => resolverConToken(token);
       authState.onError = (errMsg) => rechazarConError(errMsg);
+
+      // Por si un token o error llegó antes de registrar el callback en esta instancia
+      if (authState.pendingToken) {
+        resolverConToken(authState.pendingToken);
+        return;
+      }
+      if (authState.pendingError) {
+        rechazarConError(authState.pendingError);
+        return;
+      }
 
       try {
         window.ColumbaNativeBridge.loginGoogle((payload && payload.webClientId) || "");
@@ -327,9 +355,17 @@ function invocarLoginGoogleNativo(payload) {
     }
 
     if (typeof esperarPluginColumbaAuth === "function") {
-      const plugin = await esperarPluginColumbaAuth();
-      if (plugin && typeof plugin.loginGoogle === "function") {
-        plugin.loginGoogle(payload).then(resolverConToken).catch(rechazarConError);
+      try {
+        const plugin = await esperarPluginColumbaAuth();
+        if (plugin && typeof plugin.loginGoogle === "function") {
+          plugin.loginGoogle(payload).then((res) => {
+            const token = res && typeof res === "object" ? res.token : res;
+            resolverConToken(token);
+          }).catch(rechazarConError);
+          return;
+        }
+      } catch (e) {
+        rechazarConError(e);
         return;
       }
     }
