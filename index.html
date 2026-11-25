@@ -35,7 +35,7 @@
       box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
     }
 
-    .logo-img {
+    .app-logo {
       width: 120px;
       margin-bottom: 20px;
     }
@@ -55,7 +55,7 @@
       word-break: break-word;
     }
 
-    #diagnosticoBridge {
+    #diagnosticoWeb {
       margin-top: 14px;
       padding: 10px;
       font-size: 12px;
@@ -65,32 +65,6 @@
       color: #3c4043;
       word-break: break-word;
     }
-
-    .btn-google {
-      width: 290px;
-      height: 42px;
-      border: none;
-      border-radius: 4px;
-      background: var(--color-primary);
-      color: #fff;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 14px;
-    }
-
-    .btn-google:hover {
-      background: #1558b0;
-    }
-
-    .btn-google:disabled {
-      background: #9aa0a6;
-      cursor: not-allowed;
-    }
-
-    .app-logo {
-      width: 120px;
-      margin-bottom: 20px;
-    }
   </style>
 </head>
 
@@ -98,11 +72,8 @@
 
   <div class="main-card">
 
-    <!-- <img src="https://drive.google.com/thumbnail?id=15hTMpm_5aNuU2QKTWZGdK2XKdtpEog4w" class="logo-img"
-      alt="Columba Notebook"> -->
-
-    <!-- Logotipo local oficial -->
     <img src="img/ico_ColumbaNotebook-PRO.png" alt="Logo Columba Notebook Pro" class="app-logo">
+
     <h2>Verificación de Identidad v6.6.7</h2>
 
     <p>
@@ -113,17 +84,13 @@
 
     <div id="mensaje"></div>
 
-    <div id="diagnosticoBridge"></div>
+    <div id="diagnosticoWeb"></div>
 
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@capacitor/core@6/dist/capacitor.js"></script>
   <script>
     const CLIENTE_WEB =
       "839165918275-9e3pbpo84he4ti6m038ldbg21cj37fdr.apps.googleusercontent.com";
-
-    const CLIENTE_ANDROID =
-      "839165918275-7k8cp04fnbo9id02i2s6ni5pqvvl5om3.apps.googleusercontent.com";
 
     const URL_APPS_SCRIPT =
       "https://script.google.com/macros/s/AKfycby4ov5QtHYZUiw3CCXqpyxD8tU3LAiBSuZeKmTDcnY_FpTX_k946XlkJgEGoJTNsdOMLg/exec";
@@ -135,61 +102,7 @@
       m.textContent = texto;
     }
 
-    function obtenerBridgeCapacitor() {
-      return window.Capacitor || null;
-    }
-
-    function obtenerPluginColumbaAuthDirecto() {
-      const cap = obtenerBridgeCapacitor();
-      if (cap && cap.Plugins && cap.Plugins.ColumbaAuth) {
-        return cap.Plugins.ColumbaAuth;
-      }
-      return null;
-    }
-
-    async function esperarPluginColumbaAuth(intentosMax = 30, intervaloMs = 150) {
-      for (let i = 0; i < intentosMax; i++) {
-        const plugin = obtenerPluginColumbaAuthDirecto();
-        if (plugin && typeof plugin.loginGoogle === "function") {
-          return plugin;
-        }
-        await new Promise((r) => setTimeout(r, intervaloMs));
-      }
-      return null;
-    }
-
-    function esPlataformaNativa() {
-      const cap = obtenerBridgeCapacitor();
-      if (cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()) {
-        return true;
-      }
-      return Boolean(window.androidBridge) || navigator.userAgent.includes("ColumbaAppNative");
-    }
-
-    function actualizarDiagnosticoBridge() {
-      const box = document.getElementById("diagnosticoBridge");
-      if (!box) return;
-
-      const cap = obtenerBridgeCapacitor();
-      const plugins = Object.keys((cap && cap.Plugins) || {});
-      const headers = Array.isArray(cap?.PluginHeaders)
-        ? cap.PluginHeaders.map((h) => h.name)
-        : [];
-
-      const info = {
-        platform: cap?.getPlatform ? cap.getPlatform() : "desconocido",
-        isNative: cap?.isNativePlatform ? cap.isNativePlatform() : false,
-        androidBridge: Boolean(window.androidBridge),
-        tieneColumbaAuth: Boolean(obtenerPluginColumbaAuthDirecto()),
-        plugins,
-        headers
-      };
-
-      console.log("PLUGINS:", plugins.join(","));
-      box.textContent = JSON.stringify(info, null, 2);
-    }
-
-    function generarHuellaDigitalNativa() {
+    function generarHuellaDigitalWeb() {
       const raw = [
         navigator.userAgent,
         navigator.language,
@@ -221,9 +134,24 @@
       return id;
     }
 
+    function actualizarDiagnosticoWeb() {
+      const box = document.getElementById("diagnosticoWeb");
+      if (!box) return;
+
+      const info = {
+        entorno: "web-github",
+        origen: window.location.origin,
+        deviceId: obtenerOGenerarDeviceId(),
+        huellaDigital: generarHuellaDigitalWeb(),
+        gisCargado: Boolean(window.google && window.google.accounts && window.google.accounts.id)
+      };
+
+      box.textContent = JSON.stringify(info, null, 2);
+    }
+
     function construirURLFinal(token) {
       const deviceId = obtenerOGenerarDeviceId();
-      const huellaDigital = generarHuellaDigitalNativa();
+      const huellaDigital = generarHuellaDigitalWeb();
       const devName = navigator.userAgent;
 
       return (
@@ -257,76 +185,20 @@
       return null;
     }
 
-    async function invocarLoginGoogleNativo(payload) {
-      const columbaAuth = await esperarPluginColumbaAuth();
-      if (columbaAuth && typeof columbaAuth.loginGoogle === "function") {
-        return await columbaAuth.loginGoogle(payload);
+    window.C = function (resp) {
+      if (!resp || !resp.credential) {
+        mostrarAviso("No se recibió credencial de Google Web.", true);
+        return;
       }
 
-      const cap = obtenerBridgeCapacitor();
-      if (cap && typeof cap.nativePromise === "function") {
-        return await cap.nativePromise("ColumbaAuth", "loginGoogle", payload);
+      mostrarAviso("Acceso correcto, redirigiendo...");
+      window.location.href = construirURLFinal(resp.credential);
+    };
+
+    function cargarScriptGISWeb() {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        return Promise.resolve(true);
       }
-
-      throw new Error("El puente nativo de Android no expuso ColumbaAuth.loginGoogle");
-    }
-
-    async function iniciarLoginNativoAndroid() {
-  actualizarDiagnosticoBridge();
-
-  try {
-    mostrarAviso("Abriendo selector de Google...");
-
-    const respuesta = await invocarLoginGoogleNativo({
-      webClientId: CLIENTE_WEB
-    });
-
-    const token =
-      respuesta?.token ||
-      respuesta?.result?.token;
-
-    if (!token) {
-      mostrarAviso("Google no devolvió token", true);
-      return;
-    }
-
-    mostrarAviso("Token recibido");
-    const urlFinal = construirURLFinal(token);
-
-    if (window.Capacitor?.Plugins?.Browser?.open) {
-      await window.Capacitor.Plugins.Browser.open({
-        url: urlFinal
-      });
-    } else {
-      window.location.href = urlFinal;
-    }
-  } catch (error) {
-    mostrarAviso(error?.message || String(error), true);
-  }
-}
-
-globalThis.ejecutarLoginMovilNativo = iniciarLoginNativoAndroid;
-
-window.C = async function (resp) {
-  if (!resp || !resp.credential) {
-    mostrarAviso("No se recibió credencial de Google Web", true);
-    return;
-  }
-
-  mostrarAviso("Acceso correcto, redirigiendo...");
-  const urlFinal = construirURLFinal(resp.credential);
-
-  if (window.Capacitor?.Plugins?.Browser?.open) {
-    await window.Capacitor.Plugins.Browser.open({
-      url: urlFinal
-    });
-  } else {
-    window.location.href = urlFinal;
-  }
-};
-
-    async function cargarScriptGISWeb() {
-      if (window.google && window.google.accounts && window.google.accounts.id) return true;
 
       return new Promise((resolve) => {
         const script = document.createElement("script");
@@ -340,22 +212,8 @@ window.C = async function (resp) {
       });
     }
 
-    function renderizarBotonNativoAndroid() {
-      const buttonDiv = document.getElementById("buttonDiv");
-      buttonDiv.innerHTML = `
-        <button id="btnGoogleLogin" type="button" class="btn-google">
-          Iniciar sesión con Google
-        </button>
-      `;
-
-      const btn = document.getElementById("btnGoogleLogin");
-      if (btn) {
-        btn.addEventListener("click", iniciarLoginNativoAndroid);
-      }
-    }
-
     async function inicializar() {
-      actualizarDiagnosticoBridge();
+      actualizarDiagnosticoWeb();
 
       const tokenRetorno = capturarTokenDeUrl();
       if (tokenRetorno) {
@@ -364,17 +222,12 @@ window.C = async function (resp) {
         return;
       }
 
-      if (esPlataformaNativa()) {
-        renderizarBotonNativoAndroid();
-        await esperarPluginColumbaAuth();
-        actualizarDiagnosticoBridge();
-        return;
-      }
-
       const gisListo = await cargarScriptGISWeb();
+      actualizarDiagnosticoWeb();
+
       if (gisListo && window.google && window.google.accounts && window.google.accounts.id) {
         google.accounts.id.initialize({
-          client_id: CLIENTE_ANDROID,
+          client_id: CLIENTE_WEB,
           callback: window.C
         });
 
